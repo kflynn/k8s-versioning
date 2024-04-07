@@ -1,0 +1,15 @@
+apiVersion: kodachi.com/v1alpha1
+kind: FFS
+metadata:
+  name: hex-a1
+spec:
+  ffs: hex
+---
+apiVersion: kodachi.com/v1alpha1
+kind: FFS
+metadata:
+  name: pox-a1
+spec:
+  ffs: pox
+  strength: 4
+

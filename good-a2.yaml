@@ -1,0 +1,16 @@
+apiVersion: kodachi.com/v1alpha2
+kind: FFS
+metadata:
+  name: darkness-a2
+spec:
+  curse: darkness
+  strength: 2
+---
+apiVersion: kodachi.com/v1alpha2
+kind: FFS
+metadata:
+  name: hex-a2
+spec:
+  curse: hex
+  strength: 2
+
