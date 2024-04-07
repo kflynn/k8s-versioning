@@ -4,26 +4,28 @@ Kubernetes does not make versioning APIs easy.
 
 The most common guidance we hear pretty much boils down "you can't remove
 anything and you can't ever go backward", which is troubling in the real
-world. For Gateway API it's a _serious_ problem, because Gateway API's
-experimental channel needs to be allowed to introduce things that can turn out
-to be not ready for prime time, and therefore aren't included in the standard
-channel.
+world. For Gateway API it's a _serious_ problem: Gateway API defines an
+_experimental channel_ in which we must allow for rapid change within a set of
+alpha CRD versions, and a _stable channel_ in which we must optimize for
+stability. Gateway API also needs to support some way in which developers
+using the experimental channel can, eventually when their features become
+stable, migrate to the stable channel.
 
-The most obvious reason that this is troubling is that if you're writing code
-that uses the experimental channel, and then the features you're using make it
-into standard, you'll need a way to migrate to standard channel, and that will
-involve removing fields and API versions.
+Since the experimental channel needs to be allowed to introduce things that
+can turn out to be not ready for prime time, that means that the experimental
+channel _must_ allow for cleanly removing fields and versions. Additionally,
+experimental fields in a CRD may need to be removed or renamed while still in
+experimental.
 
-Additionally, though, experimental fields in a CRD may need to be
-removed or renamed while still in experimental... and while we'll have alpha versions in experimental that won't be in standard, we won't always have version changes in the experimental channel every time we make a change.
-
-Weirdly, both of these turn out to be less of a problem than they first
-appear, because the APIServer doesn't actually version CRDs at all. What it
-versions is _its presentation of CRs to you_.
+Weirdly, these things turn out to be less problematic than they first appear,
+because the APIServer doesn't actually version CRDs at all. What it versions
+is _its presentation of CRs to you_.
 
 ## The Lying Ways the APIServer Lies to Us
 
-What's actually stored in the APIServer for a CR is a bunch of fields and their values. The APIServer seems to not care in the slightest what fields are actually stored for a given CR.
+What's actually stored in the APIServer for a CR is a bunch of fields and
+their values. The APIServer seems to not care in the slightest what fields are
+actually stored for a given CR.
 
 (Running `demosh DEMO.md` will show some of this in action.)
 
@@ -39,7 +41,8 @@ values that it associates with a given CR.
 This means that if you use `v1alpha1` to create a CR, the APIServer will do
 validation of the input resource using the rules described by `v1alpha1` in
 the CRD... but if you then turn around and use `v1alpha2` when requesting that
-CR, the APIServer will use the `v1alpha2` rules to decide what fields to send, and `kubectl` will use the presentation rules described by `v1alpha2` to show
+CR, the APIServer will use the `v1alpha2` rules to decide what fields to send,
+and `kubectl` will use the presentation rules described by `v1alpha2` to show
 you the CR. Nothing has changed about what's stored in the APIServer.
 
 ### The APIServer _Will Not_ Ever Tell You What Version is Stored
@@ -74,7 +77,11 @@ make requests using that version.
 
 ### The APIServer _Will_ Allow Marking a Stored Version as Not Served
 
-On the other hand, if you do this, the server will respond to requests for that version with an error that's indistinguishable from the error you get if you request a version that doesn't exist. This is probably best viewed as a final step before deleting a version from `storedVersions`: you can mark it as not served, then wait a while to see if anything breaks.
+On the other hand, if you do this, the server will respond to requests for
+that version with an error that's indistinguishable from the error you get if
+you request a version that doesn't exist. This is probably best viewed as a
+final step before deleting a version from `storedVersions`: you can mark it as
+not served, then wait a while to see if anything breaks.
 
 ### The APIServer _Cannot_ Prevent Writes to a Served Version
 
@@ -85,7 +92,10 @@ you have a lot of users and you're not sure they're all ready to migrate.
 
 ### The APIServer _Can_ Deliver Everything That Is Stored
 
-If a given CRD version sets `x-kubernetes-preserve-unknown-fields` to true, then the APIServer will always send all the fields in storage for a given CR, irrespective of what the requested version implies about which fields are actually supposed to be present.
+If a given CRD version sets `x-kubernetes-preserve-unknown-fields` to true,
+then the APIServer will always send all the fields in storage for a given CR,
+irrespective of what the requested version implies about which fields are
+actually supposed to be present.
 
 This fact means that you can write a conversion utility that does not rely on
 conversion webhooks: you can just grab all the fields stored for the old
@@ -93,7 +103,10 @@ version, do whatever updates you need to do, then write a CR with the same
 name and the new version -- as long as you can infer what changes are needed
 without knowing what version is actually stored.
 
-Of course, wihout `x-kubernetes-preserve-unknown-fields`, the APIServer will drop any fields that are unknown in the version you requested, which means that you MUST set `x-kubernetes-preserve-unknown-fields` to true if you don't want to rely on conversion webhooks.
+Of course, without `x-kubernetes-preserve-unknown-fields`, the APIServer will
+drop any fields that are unknown in the version you requested, which means
+that you MUST set `x-kubernetes-preserve-unknown-fields` to true if you don't
+want to rely on conversion webhooks.
 
 ### The APIServer _Can_ Honor Whatever Version You Request
 
@@ -108,13 +121,17 @@ Given all that... what do we do about it?
 
 ### Definitions
 
-**Version**: A set of fields with a specific set of semantics. This is _very different_ from a Kubernetes `apiVersion`. If you change the semantics of a field, that's a new "version" here, whether or not you change the `apiVersion`.
+**Version**: A set of fields with a specific set of semantics. This is _very
+different_ from a Kubernetes `apiVersion`. If you change the semantics of a
+field, that's a new "version" here, whether or not you change the
+`apiVersion`.
 
 The reason for this is that the APIServer doesn't actually version CRs in
 storage, so talking about `apiVersion` as a versioning specification isn't
 meaningful.
 
-**Additive Change**: A change between versions where the only difference is adding a new field.
+**Additive Change**: A change between versions where the only difference is
+adding a new field.
 
 **Semantic Breaking Change**: A change between versions that breaks the
 semantics of a given field: either you're removing a field, changing its name,
@@ -175,7 +192,8 @@ and it's not something to be left up to the implementer absent guidance.
 The designer knows what the change is, and can define how to handle it. The
 APIServer can't help here, either, since it doesn't do versioned storage.
 
-Example: BackendTLSPolicy.TLS is going to be renamed as BackendTLSPolicy.Validation. The conversion is:
+Example: BackendTLSPolicy.TLS is going to be renamed as
+BackendTLSPolicy.Validation. The conversion is:
 
 - If you see a BackendTLSPolicy that has a TLS field, copy the value to the
   Validation field and remove the TLS field. _(I didn't say it was a very
@@ -208,7 +226,9 @@ For BackendTLSPolicy.Validation, the reverse conversion is simple:
 - If you see a BackendTLSPolicy that has a Validation field, copy the value to
   the TLS field and remove the Validation field.
 
-**API designers SHOULD define bidirectional conversions for semantic breaking changes between experimental and stable**, but Gateway API SHOULD NOT accept a change into stable without amble evidence that it is acceptable.
+**API designers SHOULD define bidirectional conversions for semantic breaking
+changes between experimental and stable**, but Gateway API SHOULD NOT accept a
+change into stable without amble evidence that it is acceptable.
 
 ### DO Implement Using the Latest Version At The Time of Implementation
 
@@ -256,7 +276,8 @@ The major points in the guidelines are:
      breaking change if we realize that it's a bad idea.
 
    - If every semantic breaking change includes the conversion definition,
-     it's possible to convert from experimental to stable and then remove the experimental definitions.
+     it's possible to convert from experimental to stable and then remove the
+     experimental definitions.
 
 - Implementers are going to need to be prepared to canonicalize versions
   internally. This sounds worse than it is: working with multiple versions
